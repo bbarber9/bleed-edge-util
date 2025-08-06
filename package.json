@@ -1,0 +1,15 @@
+{
+  "name": "bleed-edge",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "jimp": "^1.6.0"
+  }
+}
