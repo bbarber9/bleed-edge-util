@@ -1,4 +1,4 @@
-import { Jimp, colorDiff, intToRGBA } from "jimp";
+import { Jimp, intToRGBA, rgbaToInt } from "jimp";
 import path from "path";
 import fs from "fs";
 
@@ -8,48 +8,98 @@ const MTG_CARD_HEIGHT_MM = 88;
 const MTG_CARD_WIDTH_MM = 63;
 const TRANSPARENT = 0x00000000;
 
+function getAverageColorAroundPixel(
+  image: any,
+  x: number,
+  y: number,
+  radius: number
+): number {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let count = 0;
+
+  for (let i = -radius; i <= radius; i++) {
+    for (let j = -radius; j <= radius; j++) {
+      if (i * i + j * j <= radius * radius) {
+        if (
+          x + i < 0 ||
+          x + i >= image.width ||
+          y + j < 0 ||
+          y + j >= image.height
+        ) {
+          continue; // Skip pixels outside the image bounds
+        }
+        const pixelColor = image.getPixelColor(x + i, y + j);
+        const rgba = intToRGBA(pixelColor);
+        if (rgba.a !== 255) {
+          continue; // Skip transparent pixels
+        }
+        r += rgba.r;
+        g += rgba.g;
+        b += rgba.b;
+        count++;
+      }
+    }
+  }
+
+  const avgColor = rgbaToInt(
+    Math.floor(r / count),
+    Math.floor(g / count),
+    Math.floor(b / count),
+    255
+  );
+
+  return avgColor;
+}
+
 function fillInTransparentPixels(image: any, startY: number, endY: number) {
-  const sampleDepth = 10;
+  const COLOR_AVG_RADIUS = 1;
   for (let y = startY; y < endY; y++) {
     const leftSideTransparentPixels: [number, number][] = [];
     const rightSideTransparentPixels: [number, number][] = [];
 
-    let leftSideEdgeColor: number | undefined;
-
-    let rightSideEdgeColor: number | undefined;
-
-    for (let x = 0; x < image.width; x++) {
+    for (let x = Math.floor(image.width / 2); x > -1; x--) {
       const color = image.getPixelColor(x, y);
       const isTransparent = intToRGBA(color).a !== 255;
-      if (leftSideEdgeColor === undefined && !isTransparent) {
-        leftSideEdgeColor = image.getPixelColor(x + sampleDepth, y);
-      }
-      if (
-        rightSideEdgeColor === undefined &&
-        isTransparent &&
-        x > image.width / 2
-      ) {
-        rightSideEdgeColor = image.getPixelColor(x - sampleDepth, y);
-      }
-      if (isTransparent && x < image.width / 2) {
+      if (isTransparent) {
         leftSideTransparentPixels.push([x, y]);
       }
-      if (isTransparent && x > image.width / 2) {
+    }
+
+    for (let x = Math.ceil(image.width / 2); x < image.width; x++) {
+      const color = image.getPixelColor(x, y);
+      const isTransparent = intToRGBA(color).a !== 255;
+      if (isTransparent) {
         rightSideTransparentPixels.push([x, y]);
       }
     }
 
-    if (leftSideEdgeColor) {
-      leftSideTransparentPixels.forEach((coordinate) => {
-        image.setPixelColor(leftSideEdgeColor, coordinate[0], coordinate[1]);
-      });
-    }
+    leftSideTransparentPixels.forEach((coordinate) => {
+      image.setPixelColor(
+        getAverageColorAroundPixel(
+          image,
+          coordinate[0],
+          coordinate[1],
+          COLOR_AVG_RADIUS
+        ),
+        coordinate[0],
+        coordinate[1]
+      );
+    });
 
-    if (rightSideEdgeColor) {
-      rightSideTransparentPixels.forEach((coordinate) => {
-        image.setPixelColor(rightSideEdgeColor, coordinate[0], coordinate[1]);
-      });
-    }
+    rightSideTransparentPixels.forEach((coordinate) => {
+      image.setPixelColor(
+        getAverageColorAroundPixel(
+          image,
+          coordinate[0],
+          coordinate[1],
+          COLOR_AVG_RADIUS
+        ),
+        coordinate[0],
+        coordinate[1]
+      );
+    });
   }
 }
 
