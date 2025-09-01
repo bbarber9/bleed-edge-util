@@ -54,7 +54,7 @@ function getAverageColorAroundPixel(
 }
 
 function fillInTransparentPixels(image: any, startY: number, endY: number) {
-  const COLOR_AVG_RADIUS = 1;
+  const COLOR_AVG_RADIUS = 15;
   for (let y = startY; y < endY; y++) {
     const leftSideTransparentPixels: [number, number][] = [];
     const rightSideTransparentPixels: [number, number][] = [];
@@ -123,13 +123,6 @@ async function main() {
       pixelsPerMm * MTG_CARD_CORNER_RADIUS_MM
     );
 
-    fillInTransparentPixels(image, 0, cornerRadiusPixels);
-    fillInTransparentPixels(
-      image,
-      image.height - cornerRadiusPixels,
-      image.height
-    );
-
     const biggerCanvas = new Jimp({
       height: image.height + bleedSize * 2,
       width: image.width + bleedSize * 2,
@@ -138,46 +131,58 @@ async function main() {
     // put original image in the bigger canvas
     biggerCanvas.composite(image, bleedSize, bleedSize);
 
-    const rightEdge = image.clone().crop({
-      x: image.width - 1,
-      y: 0,
-      w: 1,
-      h: image.height,
+    const horizontalFlippedImage = image.clone().flip({
+      horizontal: true,
+      vertical: false,
     });
-    rightEdge.resize({ w: bleedSize, h: image.height });
 
-    const leftEdge = image.clone().crop({
-      x: 1,
+    const rightEdge = horizontalFlippedImage.clone().crop({
+      x: 0,
       y: 0,
-      w: 1,
+      w: bleedSize,
       h: image.height,
     });
-    leftEdge.resize({ w: bleedSize, h: image.height });
+
+    const leftEdge = horizontalFlippedImage.clone().crop({
+      x: image.width - bleedSize,
+      y: 0,
+      w: bleedSize,
+      h: image.height,
+    });
 
     biggerCanvas.composite(leftEdge, 0, bleedSize);
     biggerCanvas.composite(rightEdge, image.width + bleedSize, bleedSize);
 
-    const topEdge = biggerCanvas
-      .clone()
-      .crop({ x: 0, y: bleedSize, w: biggerCanvas.width, h: 1 });
-    topEdge.resize({
+    const verticalFlippedImage = biggerCanvas.clone().flip({
+      horizontal: false,
+      vertical: true,
+    });
+
+    //@ts-expect-error Jimp.clone is not typed correctly, it thinks crop doesn't exist
+    const topEdge = verticalFlippedImage.clone().crop({
+      x: 0,
+      y: image.height,
       w: biggerCanvas.width,
       h: bleedSize,
     });
 
-    const bottomEdge = biggerCanvas.clone().crop({
+    //@ts-expect-error Jimp.clone is not typed correctly, it thinks crop doesn't exist
+    const bottomEdge = verticalFlippedImage.clone().crop({
       x: 0,
-      y: image.height + bleedSize - 1,
-      w: biggerCanvas.width,
-      h: 1,
-    });
-    bottomEdge.resize({
+      y: bleedSize,
       w: biggerCanvas.width,
       h: bleedSize,
     });
 
     biggerCanvas.composite(topEdge, 0, 0);
     biggerCanvas.composite(bottomEdge, 0, biggerCanvas.height - bleedSize);
+
+    fillInTransparentPixels(biggerCanvas, 0, cornerRadiusPixels + bleedSize);
+    fillInTransparentPixels(
+      biggerCanvas,
+      biggerCanvas.height - cornerRadiusPixels - bleedSize,
+      biggerCanvas.height
+    );
 
     biggerCanvas.write(path.join(outputPath, imageName) as any);
   }
